@@ -62,7 +62,8 @@ def extract_state(checkpoint, torch):
     state = dict(state)
     if all(k.startswith('module.') for k in state):
         state = {k[7:]: v for k, v in state.items()}
-    return state
+    return {k: v for k, v in state.items()
+            if k.split('.')[-1] not in ('total_ops', 'total_params')}
 
 
 def make_model(args, checkpoint, state, torch):
@@ -90,10 +91,16 @@ def make_model(args, checkpoint, state, torch):
             raise ValueError('--model-dir must point to the ORIGINAL large-model project')
         sys.path.insert(0, str(args.model_dir.resolve()))
         module, name = args.factory.split(':')
-        factory = getattr(importlib.import_module(module), name)
+        imported = importlib.import_module(module)
+        from legacy_key_compat import prepare_original
+        prepare_original(imported, state, args.legacy_attention_output)
+        factory = getattr(imported, name)
         kwargs = json.loads(args.model_kwargs)
         model = factory(**kwargs)
-        spec = dict(model='external', factory=args.factory, kwargs=kwargs)
+        spec = dict(model='external', factory=args.factory, kwargs=kwargs,
+                    attention_output=args.legacy_attention_output,
+                    legacy_repairs=['module registration', 'BN dimension check'],
+                    exact_training_environment_verified=False)
     if not isinstance(model, torch.nn.Module):
         raise TypeError('Factory must return torch.nn.Module')
     model.load_state_dict(state, strict=True)
@@ -114,6 +121,8 @@ def main():
     p.add_argument('--model', choices=['small', 'external'], default='small')
     p.add_argument('--model-dir', type=Path)
     p.add_argument('--factory', default='model:model')
+    p.add_argument('--legacy-attention-output', choices=['relu', 'identity'],
+                   help='Explicit original attention final activation; cannot be inferred from weights')
     p.add_argument('--model-kwargs', default='{}')
     p.add_argument('--device', default='cuda:0')
     p.add_argument('--scales', nargs='+', type=int, choices=[1, 2, 3, 4], default=[1, 2, 3, 4])
