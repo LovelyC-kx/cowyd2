@@ -1,0 +1,5 @@
+# Install in an existing GPU PyTorch environment; no SpikingJelly required.
+torch>=2.2
+numpy
+Pillow
+scipy
