@@ -16,12 +16,14 @@ from baseline_suite.protocol import Protocol
 from baseline_suite.metrics import y_metrics
 from baseline_suite.train import main as train
 
+BASELINES=('srcnn','vdsr','edsr','crnn','resnet','unet')
+
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path)
     a=p.parse_args();torch.set_num_threads(2);torch.manual_seed(1234)
     counts={}
-    for name in FACTORIES:
+    for name in BASELINES:
         m=build_model(name);x=torch.rand(2,3,25,29);out=m(x)
         assert out.shape==x.shape and torch.isfinite(out).all(),name
         out.square().mean().backward()
@@ -52,7 +54,7 @@ def main():
                 '--max-val-images','1','--tile-size','32','--overlap','8','--val-every','2',
                 '--save-every','1','--log-every','1']
         # Every model trains, validates, and produces a strictly reloadable checkpoint.
-        for name in FACTORIES:
+        for name in BASELINES:
             dest=tmp/name
             train(['--model',name,'--epochs','1','--output',str(dest)]+common)
             ck=torch.load(dest/'model_last.pth',weights_only=True,map_location='cpu')

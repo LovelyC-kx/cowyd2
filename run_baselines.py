@@ -10,7 +10,7 @@ from baseline_suite.models import FACTORIES
 def main():
     p=argparse.ArgumentParser(description=__doc__,allow_abbrev=False)
     p.add_argument('--output-root',type=Path,required=True)
-    p.add_argument('--models',nargs='+',choices=FACTORIES,default=list(FACTORIES))
+    p.add_argument('--models',nargs='+',choices=FACTORIES,default=['srcnn','vdsr','edsr','crnn','resnet','unet'])
     p.add_argument('--resume-existing',action='store_true')
     args,remaining=p.parse_known_args()
     if any(s.split('=')[0] in ('--model','--output','--resume') for s in remaining):

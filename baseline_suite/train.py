@@ -13,7 +13,7 @@ from .models import build_model,FACTORIES
 from .data import datasets
 from .protocol import Protocol,fingerprint,file_sha256,write_json
 from .metrics import json_scores
-from .runtime import atomic_save,forward_padded,prepare,evaluate
+from .runtime import atomic_save,forward_padded,prepare_model,evaluate
 
 
 def sync(device):
@@ -91,6 +91,12 @@ def main(argv=None):
     config={k:(str(v.resolve()) if isinstance(v,Path) else v) for k,v in vars(a).items()}
     config['protocol']=proto;config['scale']=scale;config['model_kwargs']=json.loads(a.model_kwargs)
     if not isinstance(config['model_kwargs'],dict):raise ValueError('--model-kwargs must be a JSON object')
+    if a.model=='swinir_sr':
+        if 'scale' in config['model_kwargs'] and config['model_kwargs']['scale']!=scale:
+            raise ValueError('model scale and data scale must match')
+        config['model_kwargs']['scale']=scale
+        if a.tile_size and (a.tile_size%scale or a.overlap%scale):
+            raise ValueError('Native SR requires tile-size/overlap divisible by scale (for x3 use --overlap 30)')
     if a.output.exists() and any(a.output.iterdir()) and not a.resume:raise FileExistsError('Output nonempty; use --resume or a fresh directory')
     train,valid=datasets(config)
     data={'train':train.manifest(),'valid':valid.manifest()}
@@ -157,7 +163,7 @@ def main(argv=None):
                 optimizer.zero_grad(set_to_none=True)
                 ctx=torch.autocast('cuda',dtype=torch.float16 if a.precision=='fp16' else torch.bfloat16) if device.type=='cuda' and a.precision!='fp32' else nullcontext()
                 with ctx:
-                    pred=forward_padded(model,prepare(x,scale));loss=torch.nn.functional.mse_loss(pred,y)
+                    pred=forward_padded(model,prepare_model(model,x,scale));loss=torch.nn.functional.mse_loss(pred,y)
                 if not torch.isfinite(loss):raise FloatingPointError('Non-finite loss')
                 scaler.scale(loss).backward()
                 if a.clip_grad:

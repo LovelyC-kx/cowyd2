@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "device": "CPU",
+  "parameters": {
+    "restore": 2248083,
+    "sr": 2255868
+  },
+  "submission_parameters": 2302901,
+  "checks": [
+    "window partition/reverse",
+    "default-capacity forward/backward both modes",
+    "cached vs uncached output equality",
+    "bounded mask cache",
+    "upstream branch output equality",
+    "odd and tiny dimensions",
+    "tile batching equivalence",
+    "native scales2/3/4 and wrong-scale rejection",
+    "both modes shared train/validation/strict reload/epoch-extension resume",
+    "standalone native-SR validation exactly reproduces training metrics",
+    "actual key matrix native x2 output202x202 finite"
+  ],
+  "limitations": [
+    "No CUDA speed/memory/AMP measurements",
+    "No trained accuracy or official pretrained equivalence claim"
+  ]
+}

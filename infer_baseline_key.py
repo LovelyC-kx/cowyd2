@@ -17,7 +17,8 @@ def main():
     p.add_argument('--opju',type=Path,help='Optional provenance, no numeric extraction')
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--device',default='cuda:0' if torch.cuda.is_available() else 'cpu')
-    p.add_argument('--scales',type=int,nargs='+',choices=[1,2,3,4],default=[1,2,3,4])
+    p.add_argument('--scales',type=int,nargs='+',choices=[1,2,3,4],
+                   help='Default: trained scale for native SR, otherwise 1 2 3 4')
     p.add_argument('--polarity',choices=['positive','negative'],default='positive')
     p.add_argument('--low',type=float);p.add_argument('--high',type=float)
     a=p.parse_args()
@@ -28,6 +29,10 @@ def main():
     c=ck['config'];torch.set_num_threads(c['threads'])
     model=build_model(c['model'],**c['model_kwargs']).to(a.device).eval()
     model.load_state_dict(ck['state_dict'],strict=True)
+    native=getattr(model,'input_mode','bicubic')=='native'
+    scales=a.scales or ([model.scale] if native else [1,2,3,4])
+    if native and any(s!=model.scale for s in scales):
+        p.error('Native SR is scale-specific; use only its trained scale')
     raw=read_matrix(a.matrix)
     if (a.low is None)!=(a.high is None):p.error('Both bounds required')
     low,high=(float(raw.min()),float(raw.max())) if a.low is None else (a.low,a.high)
@@ -41,14 +46,15 @@ def main():
                 trained_task=c['task'],trained_scale=c['scale'],training_data_fingerprint=ck['data_fingerprint'],
                 reference_available=False,metrics=None,scales={},
                 interpretation='Direct measured-input transfer. Non-training scales are exploratory. No physical resolution claim.',
-                tiling='full frame; matches legacy key inference, may differ from validation tiles')
+                model_input_mode=getattr(model,'input_mode','bicubic'),
+                tiling='full frame; may differ from validation tiles')
     if a.opju:report['opju']=dict(path=str(a.opju.resolve()),sha256=sha(a.opju))
     a.output.mkdir(parents=True)
     export(a.output,'input_signal',raw);export(a.output,'input_normalized',x);preview(a.output/'input_preview.png',x)
     inp=torch.from_numpy(x.astype(np.float32))[None,None].repeat(1,3,1,1).to(a.device)
     print(f'Strict load OK: {c["model"]}, {sum(p.numel() for p in model.parameters()):,} parameters',flush=True)
     with torch.no_grad():
-        for scale in dict.fromkeys(a.scales):
+        for scale in dict.fromkeys(scales):
             folder=a.output/f'x{scale}';folder.mkdir()
             rgb=restore(model,inp,scale,tile_size=0)[0].cpu().permute(1,2,0).numpy()
             if not np.isfinite(rgb).all():raise ValueError('Non-finite output')

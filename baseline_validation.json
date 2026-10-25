@@ -19,12 +19,6 @@
     "epoch extension and exact CPU resume",
     "resume pending validation without retraining",
     "atomic save failure preserves old checkpoint",
-    "strict pairing",
-    "standalone validation exactly matches training validation",
-    "real 101x101 key matrix read with smoke-trained SRCNN; x1/x2/x3/x4 dimensions and finite outputs"
-  ],
-  "limitations": [
-    "CPU only; no target-GPU speed/memory or AMP benchmark",
-    "synthetic smoke weights only; no trained accuracy claim"
+    "strict pairing"
   ]
 }

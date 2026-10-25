@@ -137,8 +137,18 @@ class CRNNRestore(nn.Module):
         return x+self.decoder(F.interpolate(h,size=x.shape[-2:],mode='bilinear',align_corners=False))
 
 
+def _swinir(**kwargs):
+    from .swinir import build_swinir
+    return build_swinir(**kwargs)
+
+
+def _swinir_sr(**kwargs):
+    from .swinir import build_swinir_sr
+    return build_swinir_sr(**kwargs)
+
+
 FACTORIES={'srcnn':SRCNN,'vdsr':VDSR,'edsr':EDSR,'crnn':CRNNRestore,
-           'resnet':ResNetRestore,'unet':UNetRestore}
+           'resnet':ResNetRestore,'unet':UNetRestore,'swinir':_swinir,'swinir_sr':_swinir_sr}
 
 
 def build_model(name,**kwargs):

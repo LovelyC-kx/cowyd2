@@ -24,30 +24,47 @@ def prepare(lr,scale):
     return lr if scale==1 else F.interpolate(lr,scale_factor=scale,mode='bicubic',align_corners=False,antialias=False)
 
 
+def prepare_model(model,lr,scale):
+    if getattr(model,'input_mode','bicubic')=='native':
+        if getattr(model,'scale',None)!=scale:
+            raise ValueError('Native SR head scale differs from requested reconstruction scale')
+        return lr
+    return prepare(lr,scale)
+
+
 def forward_padded(model,x):
     h,w=x.shape[-2:]
-    x=F.pad(x,(0,-w%8,0,-h%8),mode='replicate')
+    if not getattr(model,'handles_padding',False):
+        x=F.pad(x,(0,-w%8,0,-h%8),mode='replicate')
     y=model(x)
-    if y.shape!=x.shape:raise ValueError(f'Output {y.shape} must equal input {x.shape}')
-    return y[...,:h,:w]
+    factor=getattr(model,'scale',1) if getattr(model,'input_mode','bicubic')=='native' else 1
+    expected=(*x.shape[:2],x.shape[-2]*factor,x.shape[-1]*factor)
+    if tuple(y.shape)!=expected:raise ValueError(f'Output {y.shape} must equal {expected}')
+    return y[...,:h*factor,:w*factor]
 
 
 @torch.no_grad()
 def restore(model,lr,scale=2,tile_size=192,overlap=32,tile_batch=4):
     if tile_size<0 or overlap<0 or (tile_size and overlap>=tile_size) or tile_batch<1:
         raise ValueError('Invalid tiling settings')
-    x=prepare(lr,scale);h,w=x.shape[-2:]
+    x=prepare_model(model,lr,scale);h,w=x.shape[-2:]
+    factor=scale if getattr(model,'input_mode','bicubic')=='native' else 1
+    if factor!=1 and tile_size:
+        if tile_size%factor or overlap%factor:
+            raise ValueError('For native SR, HR tile-size and overlap must be divisible by scale')
+        tile_size//=factor;overlap//=factor
     if not tile_size or max(h,w)<=tile_size:return forward_padded(model,x)
     if x.shape[0]!=1:raise ValueError('Tiled evaluation expects one source image')
     def positions(length):
         return [0] if length<=tile_size else list(range(0,length-tile_size,tile_size-overlap))+[length-tile_size]
     coords=[(y,z) for y in positions(h) for z in positions(w)]
-    total=torch.zeros_like(x);count=x.new_zeros(1,1,h,w)
+    total=x.new_zeros(x.shape[0],x.shape[1],h*factor,w*factor);count=x.new_zeros(1,1,h*factor,w*factor)
     for start in range(0,len(coords),tile_batch):
         block=coords[start:start+tile_batch]
         batch=torch.cat([x[...,y:y+tile_size,z:z+tile_size] for y,z in block],0)
         output=forward_padded(model,batch)
         for j,(y,z) in enumerate(block):
+            y*=factor;z*=factor
             hh,ww=output.shape[-2:];total[...,y:y+hh,z:z+ww]+=output[j:j+1]
             count[...,y:y+hh,z:z+ww]+=1
     return total/count
